@@ -129,18 +129,8 @@ class HttpClient {
       headers.Authorization = `Bearer ${token}`;
       console.log('Adding Authorization header to request:', `Bearer ${token.substring(0, 20)}...`);
     } else if (token && TokenManager.isTokenExpired(token)) {
-      console.log('Token is expired, attempting refresh...');
-      // Try to refresh token before making the request
-      try {
-        await this.handleUnauthorized();
-        const newToken = TokenManager.getToken();
-        if (newToken) {
-          headers.Authorization = `Bearer ${newToken}`;
-          console.log('Using refreshed token for request');
-        }
-      } catch (error) {
-        console.log('Token refresh failed, proceeding without auth header');
-      }
+      console.log('Token is expired, clearing tokens and proceeding without auth');
+      TokenManager.clearTokens();
     } else {
       console.log('No valid token available for request');
     }
@@ -177,8 +167,8 @@ class HttpClient {
 
       // Handle authentication errors
       if (response.status === 401) {
-        console.log('Received 401 Unauthorized, handling token refresh...');
-        await this.handleUnauthorized();
+        console.log('Received 401 Unauthorized, clearing tokens');
+        TokenManager.clearTokens();
         throw new Error('Authentication required');
       }
 
@@ -210,33 +200,6 @@ class HttpClient {
       
       throw new Error('Network error occurred');
     }
-  }
-
-  private async handleUnauthorized(): Promise<void> {
-    const refreshToken = TokenManager.getRefreshToken();
-    
-    if (refreshToken) {
-      try {
-        console.log('Attempting to refresh token...');
-        const response = await this.post<{ token: string; refreshToken: string }>('/token/refresh', {
-          refresh_token: refreshToken,
-        });
-        
-        if (response.success && response.data) {
-          console.log('Token refresh successful');
-          TokenManager.setToken(response.data.token);
-          TokenManager.setRefreshToken(response.data.refreshToken);
-          return;
-        }
-      } catch (error) {
-        console.error('Token refresh failed:', error);
-      }
-    }
-    
-    // Clear tokens and redirect to login
-    console.log('Token refresh failed, clearing tokens and redirecting to login');
-    TokenManager.clearTokens();
-    window.location.href = '/';
   }
 
   async get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {

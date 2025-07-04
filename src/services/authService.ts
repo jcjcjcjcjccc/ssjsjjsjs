@@ -381,41 +381,6 @@ class AuthService {
   }
 
   /**
-   * Refresh authentication token
-   */
-  async refreshToken(): Promise<LoginResponse> {
-    try {
-      const refreshToken = TokenManager.getRefreshToken();
-      
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-
-      console.log('Refreshing authentication token...');
-      const response = await httpClient.post<LoginResponse>('/token/refresh', {
-        refresh_token: refreshToken,
-      });
-      
-      if (response.success && response.data) {
-        console.log('Token refresh successful');
-        // Update stored tokens
-        TokenManager.setToken(response.data.token);
-        TokenManager.setRefreshToken(response.data.refreshToken);
-        TokenManager.setUser(response.data.user);
-        
-        return response.data;
-      }
-      
-      throw new Error(response.message || 'Token refresh failed');
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      // Clear tokens on refresh failure
-      TokenManager.clearTokens();
-      throw error;
-    }
-  }
-
-  /**
    * Check if user is authenticated
    */
   isAuthenticated(): boolean {
