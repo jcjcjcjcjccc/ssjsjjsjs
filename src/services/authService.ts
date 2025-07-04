@@ -62,21 +62,55 @@ class AuthService {
    */
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
     try {
+      console.log('Attempting login with credentials:', { email: credentials.email });
+      
       const response = await httpClient.post<LoginResponse>('/login', credentials);
       
+      console.log('Login response received:', {
+        success: response.success,
+        hasData: !!response.data,
+        hasToken: !!(response.data?.token),
+        hasRefreshToken: !!(response.data?.refreshToken),
+        hasUser: !!(response.data?.user)
+      });
+      
       if (response.success && response.data) {
-        // Store tokens and user data
-        TokenManager.setToken(response.data.token);
-        TokenManager.setRefreshToken(response.data.refreshToken);
-        TokenManager.setFirstTimeLogin(response.data.first_time_login === 1);
-        TokenManager.setUser(response.data.user);
+        const { token, refreshToken, user, first_time_login } = response.data;
         
-        console.log('Login successful:', {
-          token: response.data.token,
-          refreshToken: response.data.refreshToken,
-          firstTimeLogin: response.data.first_time_login,
-          user: response.data.user
+        // Validate that we have the required data
+        if (!token) {
+          throw new Error('No authentication token received from server');
+        }
+        
+        if (!user) {
+          throw new Error('No user data received from server');
+        }
+        
+        // Store tokens and user data
+        console.log('Storing authentication data...');
+        TokenManager.setToken(token);
+        
+        if (refreshToken) {
+          TokenManager.setRefreshToken(refreshToken);
+        }
+        
+        TokenManager.setFirstTimeLogin(first_time_login === 1);
+        TokenManager.setUser(user);
+        
+        // Verify tokens were stored correctly
+        const storedToken = TokenManager.getToken();
+        const storedUser = TokenManager.getUser();
+        
+        console.log('Authentication data stored successfully:', {
+          tokenStored: !!storedToken,
+          userStored: !!storedUser,
+          firstTimeLogin: first_time_login === 1
         });
+        
+        // Additional verification
+        if (!storedToken) {
+          throw new Error('Failed to store authentication token');
+        }
         
         return response.data;
       }
@@ -84,6 +118,8 @@ class AuthService {
       throw new Error(response.message || 'Login failed');
     } catch (error) {
       console.error('Login error:', error);
+      // Clear any partial data that might have been stored
+      TokenManager.clearTokens();
       throw error;
     }
   }
@@ -93,14 +129,54 @@ class AuthService {
    */
   async register(userData: RegisterData): Promise<LoginResponse> {
     try {
+      console.log('Attempting registration with data:', { 
+        email: userData.email, 
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        company: userData.company 
+      });
+      
       const response = await httpClient.post<LoginResponse>('/register', userData);
       
+      console.log('Registration response received:', {
+        success: response.success,
+        hasData: !!response.data,
+        hasToken: !!(response.data?.token),
+        hasUser: !!(response.data?.user)
+      });
+      
       if (response.success && response.data) {
+        const { token, refreshToken, user, first_time_login } = response.data;
+        
+        // Validate that we have the required data
+        if (!token) {
+          throw new Error('No authentication token received from server');
+        }
+        
+        if (!user) {
+          throw new Error('No user data received from server');
+        }
+        
         // Store tokens and user data
-        TokenManager.setToken(response.data.token);
-        TokenManager.setRefreshToken(response.data.refreshToken);
-        TokenManager.setFirstTimeLogin(response.data.first_time_login === 1);
-        TokenManager.setUser(response.data.user);
+        console.log('Storing registration authentication data...');
+        TokenManager.setToken(token);
+        
+        if (refreshToken) {
+          TokenManager.setRefreshToken(refreshToken);
+        }
+        
+        TokenManager.setFirstTimeLogin(first_time_login === 1);
+        TokenManager.setUser(user);
+        
+        // Verify tokens were stored correctly
+        const storedToken = TokenManager.getToken();
+        const storedUser = TokenManager.getUser();
+        
+        console.log('Registration authentication data stored successfully:', {
+          tokenStored: !!storedToken,
+          userStored: !!storedUser,
+          firstTimeLogin: first_time_login === 1
+        });
         
         return response.data;
       }
@@ -108,6 +184,8 @@ class AuthService {
       throw new Error(response.message || 'Registration failed');
     } catch (error) {
       console.error('Registration error:', error);
+      // Clear any partial data that might have been stored
+      TokenManager.clearTokens();
       throw error;
     }
   }
@@ -117,13 +195,16 @@ class AuthService {
    */
   async logout(): Promise<void> {
     try {
+      console.log('Attempting logout...');
       // Call logout endpoint to invalidate token on server
       await httpClient.post('/logout');
+      console.log('Server logout successful');
     } catch (error) {
       console.error('Logout error:', error);
       // Continue with local logout even if server call fails
     } finally {
       // Clear local tokens
+      console.log('Clearing local authentication data...');
       TokenManager.clearTokens();
     }
   }
@@ -136,13 +217,16 @@ class AuthService {
       // First try to get from local storage
       const localUser = TokenManager.getUser();
       if (localUser) {
+        console.log('Retrieved user from local storage');
         return localUser;
       }
 
       // If not in local storage, fetch from server
+      console.log('Fetching user profile from server...');
       const response = await httpClient.get<User>('/user');
       
       if (response.success && response.data) {
+        console.log('User profile fetched successfully');
         TokenManager.setUser(response.data);
         return response.data;
       }
@@ -161,12 +245,15 @@ class AuthService {
     try {
       const user = this.getStoredUser();
       if (!user || !user.organisation_id) {
+        console.log('No user or organization ID found');
         return null;
       }
 
+      console.log('Fetching organization data for ID:', user.organisation_id);
       const response = await httpClient.get<Organization>(`/organisations/${user.organisation_id}`);
       
       if (response.success && response.data) {
+        console.log('Organization data fetched successfully');
         return response.data;
       }
       
@@ -182,9 +269,11 @@ class AuthService {
    */
   async updateProfile(userData: Partial<User>): Promise<User> {
     try {
+      console.log('Updating user profile...');
       const response = await httpClient.put<User>('/user/profile', userData);
       
       if (response.success && response.data) {
+        console.log('Profile updated successfully');
         TokenManager.setUser(response.data);
         return response.data;
       }
@@ -201,11 +290,14 @@ class AuthService {
    */
   async changePassword(passwordData: ChangePasswordData): Promise<void> {
     try {
+      console.log('Changing password...');
       const response = await httpClient.post('/user/change-password', passwordData);
       
       if (!response.success) {
         throw new Error(response.message || 'Failed to change password');
       }
+      
+      console.log('Password changed successfully');
     } catch (error) {
       console.error('Change password error:', error);
       throw error;
@@ -217,11 +309,14 @@ class AuthService {
    */
   async requestPasswordReset(data: PasswordResetRequest): Promise<void> {
     try {
+      console.log('Requesting password reset for:', data.email);
       const response = await httpClient.post('/password/forgot', data);
       
       if (!response.success) {
         throw new Error(response.message || 'Failed to request password reset');
       }
+      
+      console.log('Password reset request sent successfully');
     } catch (error) {
       console.error('Password reset request error:', error);
       throw error;
@@ -233,11 +328,14 @@ class AuthService {
    */
   async resetPassword(data: PasswordReset): Promise<void> {
     try {
+      console.log('Resetting password with token...');
       const response = await httpClient.post('/password/reset', data);
       
       if (!response.success) {
         throw new Error(response.message || 'Failed to reset password');
       }
+      
+      console.log('Password reset successfully');
     } catch (error) {
       console.error('Password reset error:', error);
       throw error;
@@ -249,11 +347,14 @@ class AuthService {
    */
   async verifyEmail(token: string): Promise<void> {
     try {
+      console.log('Verifying email with token...');
       const response = await httpClient.post('/email/verify', { token });
       
       if (!response.success) {
         throw new Error(response.message || 'Failed to verify email');
       }
+      
+      console.log('Email verified successfully');
     } catch (error) {
       console.error('Email verification error:', error);
       throw error;
@@ -265,11 +366,14 @@ class AuthService {
    */
   async resendEmailVerification(): Promise<void> {
     try {
+      console.log('Resending email verification...');
       const response = await httpClient.post('/email/resend');
       
       if (!response.success) {
         throw new Error(response.message || 'Failed to resend verification email');
       }
+      
+      console.log('Verification email sent successfully');
     } catch (error) {
       console.error('Resend verification error:', error);
       throw error;
@@ -287,11 +391,13 @@ class AuthService {
         throw new Error('No refresh token available');
       }
 
+      console.log('Refreshing authentication token...');
       const response = await httpClient.post<LoginResponse>('/token/refresh', {
         refresh_token: refreshToken,
       });
       
       if (response.success && response.data) {
+        console.log('Token refresh successful');
         // Update stored tokens
         TokenManager.setToken(response.data.token);
         TokenManager.setRefreshToken(response.data.refreshToken);
@@ -314,7 +420,12 @@ class AuthService {
    */
   isAuthenticated(): boolean {
     const token = TokenManager.getToken();
-    return token !== null && !TokenManager.isTokenExpired(token);
+    const isAuth = token !== null && !TokenManager.isTokenExpired(token);
+    console.log('Authentication check:', {
+      hasToken: !!token,
+      isAuthenticated: isAuth
+    });
+    return isAuth;
   }
 
   /**
@@ -371,9 +482,11 @@ class AuthService {
    */
   async uploadAvatar(file: File): Promise<User> {
     try {
+      console.log('Uploading user avatar...');
       const response = await httpClient.upload<User>('/user/avatar', file);
       
       if (response.success && response.data) {
+        console.log('Avatar uploaded successfully');
         TokenManager.setUser(response.data);
         return response.data;
       }

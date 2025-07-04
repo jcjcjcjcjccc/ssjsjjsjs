@@ -27,10 +27,13 @@ class TokenManager {
   private static readonly USER_KEY = 'gdpilia-user';
 
   static getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY);
+    const token = localStorage.getItem(this.TOKEN_KEY);
+    console.log('Getting token from localStorage:', token ? 'Token exists' : 'No token found');
+    return token;
   }
 
   static setToken(token: string): void {
+    console.log('Setting token in localStorage:', token ? 'Token being saved' : 'Empty token');
     localStorage.setItem(this.TOKEN_KEY, token);
   }
 
@@ -60,6 +63,7 @@ class TokenManager {
   }
 
   static clearTokens(): void {
+    console.log('Clearing all tokens from localStorage');
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.REFRESH_TOKEN_KEY);
     localStorage.removeItem(this.FIRST_TIME_LOGIN_KEY);
@@ -69,8 +73,11 @@ class TokenManager {
   static isTokenExpired(token: string): boolean {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.exp * 1000 < Date.now();
-    } catch {
+      const isExpired = payload.exp * 1000 < Date.now();
+      console.log('Token expiration check:', isExpired ? 'Token is expired' : 'Token is valid');
+      return isExpired;
+    } catch (error) {
+      console.log('Token validation failed:', error);
       return true;
     }
   }
@@ -117,9 +124,25 @@ class HttpClient {
       ...options.headers,
     };
 
-    // Add authorization header if token exists
+    // Add authorization header if token exists and is not expired
     if (token && !TokenManager.isTokenExpired(token)) {
       headers.Authorization = `Bearer ${token}`;
+      console.log('Adding Authorization header to request:', `Bearer ${token.substring(0, 20)}...`);
+    } else if (token && TokenManager.isTokenExpired(token)) {
+      console.log('Token is expired, attempting refresh...');
+      // Try to refresh token before making the request
+      try {
+        await this.handleUnauthorized();
+        const newToken = TokenManager.getToken();
+        if (newToken) {
+          headers.Authorization = `Bearer ${newToken}`;
+          console.log('Using refreshed token for request');
+        }
+      } catch (error) {
+        console.log('Token refresh failed, proceeding without auth header');
+      }
+    } else {
+      console.log('No valid token available for request');
     }
 
     // Prepare request options
@@ -129,8 +152,14 @@ class HttpClient {
       signal: AbortSignal.timeout(API_CONFIG.TIMEOUT),
     };
 
+    console.log(`Making ${requestOptions.method || 'GET'} request to:`, url);
+    console.log('Request headers:', headers);
+
     try {
       const response = await fetch(url, requestOptions);
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
       
       // Handle different response types
       let data: any;
@@ -138,6 +167,7 @@ class HttpClient {
       
       if (contentType && contentType.includes('application/json')) {
         data = await response.json();
+        console.log('Response data:', data);
       } else {
         data = {
           success: response.ok,
@@ -147,13 +177,16 @@ class HttpClient {
 
       // Handle authentication errors
       if (response.status === 401) {
+        console.log('Received 401 Unauthorized, handling token refresh...');
         await this.handleUnauthorized();
         throw new Error('Authentication required');
       }
 
       // Handle other HTTP errors
       if (!response.ok) {
-        throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
+        const errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
+        console.error('Request failed:', errorMessage);
+        throw new Error(errorMessage);
       }
 
       // For successful responses, wrap in our standard format if not already wrapped
@@ -184,11 +217,13 @@ class HttpClient {
     
     if (refreshToken) {
       try {
+        console.log('Attempting to refresh token...');
         const response = await this.post<{ token: string; refreshToken: string }>('/token/refresh', {
           refresh_token: refreshToken,
         });
         
         if (response.success && response.data) {
+          console.log('Token refresh successful');
           TokenManager.setToken(response.data.token);
           TokenManager.setRefreshToken(response.data.refreshToken);
           return;
@@ -199,6 +234,7 @@ class HttpClient {
     }
     
     // Clear tokens and redirect to login
+    console.log('Token refresh failed, clearing tokens and redirecting to login');
     TokenManager.clearTokens();
     window.location.href = '/';
   }
@@ -249,6 +285,7 @@ class HttpClient {
     
     if (token && !TokenManager.isTokenExpired(token)) {
       headers.Authorization = `Bearer ${token}`;
+      console.log('Adding Authorization header to file upload');
     }
 
     return this.request<T>(endpoint, {

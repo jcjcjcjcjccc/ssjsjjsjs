@@ -30,6 +30,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [signInData, setSignInData] = useState({
     email: 'danaffs2@test.com',
@@ -155,25 +156,31 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
     },
   ];
 
+  const clearError = () => {
+    setError(null);
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
 
     try {
+      console.log('Starting login process...');
       const response = await authService.login(signInData);
-      console.log('Login response:', response);
+      console.log('Login successful, calling onLogin callback');
       
-      // Check if it's first time login
-      if (response.first_time_login === 1) {
-        console.log('First time login detected');
-        // You can handle first-time login flow here if needed
+      // Verify that the token was actually stored
+      const storedToken = authService.getToken();
+      if (!storedToken) {
+        throw new Error('Authentication token was not properly stored');
       }
       
+      console.log('Token verified in storage, proceeding with login');
       onLogin();
     } catch (error: any) {
       console.error('Login failed:', error);
-      // Show only an alert, don't refresh or navigate
-      alert(error.message || 'Échec de la connexion. Veuillez vérifier vos identifiants et réessayer.');
+      setError(error.message || 'Échec de la connexion. Veuillez vérifier vos identifiants et réessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -181,14 +188,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    
     if (signUpData.password !== signUpData.confirmPassword) {
-      alert('Les mots de passe ne correspondent pas');
+      setError('Les mots de passe ne correspondent pas');
       return;
     }
 
     setIsLoading(true);
 
     try {
+      console.log('Starting registration process...');
       const registerData = {
         firstName: signUpData.firstName,
         lastName: signUpData.lastName,
@@ -198,13 +208,19 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
       };
 
       const response = await authService.register(registerData);
-      console.log('Registration response:', response);
+      console.log('Registration successful, calling onLogin callback');
       
+      // Verify that the token was actually stored
+      const storedToken = authService.getToken();
+      if (!storedToken) {
+        throw new Error('Authentication token was not properly stored');
+      }
+      
+      console.log('Token verified in storage, proceeding with login');
       onLogin();
     } catch (error: any) {
       console.error('Registration failed:', error);
-      // Show only an alert, don't refresh or navigate
-      alert(error.message || 'Échec de l\'inscription. Veuillez réessayer.');
+      setError(error.message || 'Échec de l\'inscription. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -232,13 +248,19 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             </div>
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => setShowSignIn(true)}
+                onClick={() => {
+                  setShowSignIn(true);
+                  clearError();
+                }}
                 className="text-slate-600 hover:text-slate-900 font-medium transition-colors"
               >
                 {t('signIn')}
               </button>
               <button
-                onClick={() => setShowSignUp(true)}
+                onClick={() => {
+                  setShowSignUp(true);
+                  clearError();
+                }}
                 className="btn-primary"
               >
                 {t('getStarted')}
@@ -266,7 +288,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
               <button
-                onClick={() => setShowSignUp(true)}
+                onClick={() => {
+                  setShowSignUp(true);
+                  clearError();
+                }}
                 className="btn-primary text-lg px-8 py-4 flex items-center space-x-2"
               >
                 <span>{t('startFreeTrial')}</span>
@@ -393,7 +418,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   ))}
                 </ul>
                 <button
-                  onClick={() => setShowSignUp(true)}
+                  onClick={() => {
+                    setShowSignUp(true);
+                    clearError();
+                  }}
                   className={`w-full py-3 rounded-xl font-semibold transition-all duration-300 ${
                     plan.popular
                       ? 'btn-primary'
@@ -419,7 +447,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               {t('ctaDescription')}
             </p>
             <button
-              onClick={() => setShowSignUp(true)}
+              onClick={() => {
+                setShowSignUp(true);
+                clearError();
+              }}
               className="btn-primary text-lg px-8 py-4 flex items-center space-x-2 mx-auto"
             >
               <span>{t('startFreeTrial')}</span>
@@ -457,12 +488,21 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-slate-900">{t('welcomeBackTitle')}</h3>
               <button
-                onClick={() => setShowSignIn(false)}
+                onClick={() => {
+                  setShowSignIn(false);
+                  clearError();
+                }}
                 className="text-slate-400 hover:text-slate-600"
               >
                 <X size={24} />
               </button>
             </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
 
             <form onSubmit={handleSignIn} className="space-y-6">
               <div>
@@ -474,6 +514,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   className="input-modern"
                   placeholder="Entrez votre adresse email"
                   required
+                  disabled={isLoading}
                 />
               </div>
               <div>
@@ -486,11 +527,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                     className="input-modern pr-12"
                     placeholder="Entrez votre mot de passe"
                     required
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    disabled={isLoading}
                   >
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -510,8 +553,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 onClick={() => {
                   setShowSignIn(false);
                   setShowSignUp(true);
+                  clearError();
                 }}
                 className="text-blue-600 hover:text-blue-700 font-medium"
+                disabled={isLoading}
               >
                 {t('signUp')}
               </button>
@@ -527,12 +572,21 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-slate-900">{t('createAccount')}</h3>
               <button
-                onClick={() => setShowSignUp(false)}
+                onClick={() => {
+                  setShowSignUp(false);
+                  clearError();
+                }}
                 className="text-slate-400 hover:text-slate-600"
               >
                 <X size={24} />
               </button>
             </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
 
             <form onSubmit={handleSignUp} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -545,6 +599,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                     className="input-modern"
                     placeholder="Votre prénom"
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div>
@@ -556,6 +611,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                     className="input-modern"
                     placeholder="Votre nom"
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
@@ -568,6 +624,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   className="input-modern"
                   placeholder="Votre adresse email professionnelle"
                   required
+                  disabled={isLoading}
                 />
               </div>
               <div>
@@ -579,6 +636,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   className="input-modern"
                   placeholder="Nom de votre entreprise"
                   required
+                  disabled={isLoading}
                 />
               </div>
               <div>
@@ -591,11 +649,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                     className="input-modern pr-12"
                     placeholder="Créez un mot de passe sécurisé"
                     required
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    disabled={isLoading}
                   >
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -611,11 +671,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                     className="input-modern pr-12"
                     placeholder="Confirmez votre mot de passe"
                     required
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    disabled={isLoading}
                   >
                     {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -638,8 +700,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 onClick={() => {
                   setShowSignUp(false);
                   setShowSignIn(true);
+                  clearError();
                 }}
                 className="text-blue-600 hover:text-blue-700 font-medium"
+                disabled={isLoading}
               >
                 {t('signIn')}
               </button>
